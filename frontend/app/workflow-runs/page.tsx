@@ -1,0 +1,172 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, Clock3, Database, GitBranch, Workflow } from "lucide-react";
+
+import { apiGet } from "@/lib/api";
+import type { Repository } from "@/lib/types";
+import { PageTitle } from "@/components/ui/card";
+
+type WorkflowTask = {
+  id: string;
+  task_id: string;
+  agent_name: string;
+  task_type: string;
+  status: string;
+  summary: string;
+  error?: string | null;
+};
+
+type WorkflowRun = {
+  id: string;
+  repo_id?: string | null;
+  goal: string;
+  status: string;
+  spec: { workflow_id?: string; tasks?: Array<{ id: string; dependencies?: string[] }> };
+  observation: { status?: string; confidence?: number; findings?: Array<{ severity?: string; message?: string }> };
+  final_answer: string;
+  metrics: Record<string, number | string>;
+  created_at?: string | null;
+  completed_at?: string | null;
+  tasks: WorkflowTask[];
+};
+
+const statusLabel: Record<string, string> = {
+  success: "Succeeded",
+  completed: "Succeeded",
+  failed: "Failed",
+  running: "Running"
+};
+
+export default function WorkflowRunsPage() {
+  const [repos, setRepos] = useState<Repository[]>([]);
+  const [repoId, setRepoId] = useState("");
+  const [runs, setRuns] = useState<WorkflowRun[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiGet<Repository[]>("/api/repos")
+      .then((items) => {
+        setRepos(items);
+        setRepoId(items[0]?.id || "");
+      })
+      .catch(() => setRepos([]));
+  }, []);
+
+  useEffect(() => {
+    if (!repoId) return;
+    setLoading(true);
+    apiGet<WorkflowRun[]>(`/api/chat/workflow-runs?repo_id=${repoId}`)
+      .then((items) => {
+        setRuns(items);
+        setSelectedId((current) => (items.some((item) => item.id === current) ? current : items[0]?.id || ""));
+      })
+      .finally(() => setLoading(false));
+  }, [repoId]);
+
+  const selected = useMemo(() => runs.find((item) => item.id === selectedId) ?? runs[0], [runs, selectedId]);
+  const completedTasks = selected?.tasks.filter((task) => task.status === "success" || task.status === "completed").length ?? 0;
+  const findings = selected?.observation.findings ?? [];
+
+  return (
+    <>
+      <PageTitle title="Workflow Runs" description="For each engineering goal, view the Planner task graph, each agent's results, Observer findings and the final synthesized conclusion." />
+
+      <section className="grid gap-3 border-y border-line bg-white px-4 py-4 md:grid-cols-[minmax(280px,1fr)_repeat(3,minmax(150px,220px))]">
+        <label className="text-sm font-medium text-slate-700">
+          Repository
+          <select className="mt-2 w-full rounded-md border border-line bg-white px-3 py-2 outline-none focus:border-teal-500" value={repoId} onChange={(event) => setRepoId(event.target.value)}>
+            {repos.map((repo) => <option key={repo.id} value={repo.id}>{repo.full_name}</option>)}
+          </select>
+        </label>
+        <Metric icon={Workflow} label="Workflows" value={runs.length} />
+        <Metric icon={CheckCircle2} label="Completed tasks" value={completedTasks} />
+        <Metric icon={AlertTriangle} label="Observer findings" value={findings.length} />
+      </section>
+
+      <div className="mt-4 grid min-h-[560px] gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="border-r border-line bg-white pr-4">
+          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Runs</div>
+          <div className="space-y-2">
+            {runs.map((run) => (
+              <button key={run.id} onClick={() => setSelectedId(run.id)} className={`w-full rounded-md border px-3 py-3 text-left transition ${selected?.id === run.id ? "border-teal-300 bg-teal-50" : "border-line bg-white hover:bg-panel"}`}>
+                <div className="line-clamp-2 text-sm font-semibold text-ink">{run.goal}</div>
+                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                  <span>{statusLabel[run.status] || run.status}</span>
+                  <span>{run.created_at ? new Date(run.created_at).toLocaleString("en-US", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</span>
+                </div>
+              </button>
+            ))}
+            {!loading && runs.length === 0 && <div className="rounded-md border border-dashed border-line p-4 text-sm text-slate-500">No workflow runs yet.</div>}
+          </div>
+        </aside>
+
+        <main className="min-w-0">
+          {selected ? (
+            <div className="space-y-5">
+              <section className="border-b border-line pb-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-teal-600 px-3 py-1 text-xs font-semibold text-white">{statusLabel[selected.status] || selected.status}</span>
+                  <span className="inline-flex items-center gap-1 text-xs text-slate-500"><GitBranch className="h-3.5 w-3.5" />{selected.spec.workflow_id || selected.id.slice(0, 8)}</span>
+                  <span className="inline-flex items-center gap-1 text-xs text-slate-500"><Database className="h-3.5 w-3.5" />Persisted</span>
+                </div>
+                <h2 className="mt-3 text-xl font-semibold text-ink">{selected.goal}</h2>
+              </section>
+
+              <section>
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="font-semibold text-ink">Agent Execution Chain</h3>
+                  <span className="text-xs text-slate-500">{completedTasks}/{selected.tasks.length} done</span>
+                </div>
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  {selected.tasks.map((task, index) => (
+                    <div key={task.id} className="relative rounded-md border border-line bg-white p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-teal-50 text-xs font-semibold text-teal-700">{index + 1}</span>
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      </div>
+                      <div className="mt-3 text-sm font-semibold text-ink">{task.agent_name}</div>
+                      <div className="mt-1 text-xs text-slate-500">{task.task_type}</div>
+                      <p className="mt-3 text-xs leading-5 text-slate-600">{task.summary || "Task completed"}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.7fr)]">
+                <div className="rounded-md border border-teal-200 bg-teal-50/70 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-teal-900"><Workflow className="h-4 w-4" />Synthesis Conclusion</div>
+                  <p className="mt-3 text-sm leading-7 text-slate-700">{selected.final_answer}</p>
+                </div>
+                <div className="rounded-md border border-amber-200 bg-amber-50/70 p-4">
+                  <div className="flex items-center justify-between gap-2 text-sm font-semibold text-amber-900">
+                    <span className="inline-flex items-center gap-2"><AlertTriangle className="h-4 w-4" />Observer Cross-check</span>
+                    {typeof selected.observation.confidence === "number" && <span className="text-xs">Confidence {Math.round(selected.observation.confidence * 100)}%</span>}
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {findings.map((finding, index) => <div key={index} className="text-sm leading-6 text-slate-700">{finding.message}</div>)}
+                  </div>
+                </div>
+              </section>
+
+              <div className="flex items-center gap-2 border-t border-line pt-3 text-xs text-slate-500">
+                <Clock3 className="h-3.5 w-3.5" />
+                Created {selected.created_at ? new Date(selected.created_at).toLocaleString("en-US") : "unknown"}; on completion both workflow-level and task-level records are written.
+              </div>
+            </div>
+          ) : <div className="text-sm text-slate-500">{loading ? "Loading workflow runs..." : "Select a run."}</div>}
+        </main>
+      </div>
+    </>
+  );
+}
+
+function Metric({ icon: Icon, label, value }: { icon: typeof Workflow; label: string; value: number }) {
+  return (
+    <div className="flex items-center gap-3 border-l border-line pl-4">
+      <Icon className="h-5 w-5 text-teal-700" />
+      <div><div className="text-xs text-slate-500">{label}</div><div className="mt-1 text-xl font-semibold text-ink">{value}</div></div>
+    </div>
+  );
+}
