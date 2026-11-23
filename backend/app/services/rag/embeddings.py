@@ -93,7 +93,7 @@ def _embedding_payload(texts: list[str], dimensions: int, model: str) -> dict[st
         "model": model,
         "input": texts,
     }
-    if dimensions:
+    if dimensions and settings.embedding_send_dimensions:
         payload["dimensions"] = dimensions
     return payload
 

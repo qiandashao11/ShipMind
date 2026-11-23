@@ -27,49 +27,33 @@ services:
     profiles:
       - optional
 
-  etcd:
-    image: quay.io/coreos/etcd:v3.5.18
-    container_name: shipmind-etcd
-    restart: unless-stopped
-    environment:
-      ETCD_AUTO_COMPACTION_MODE: revision
-      ETCD_AUTO_COMPACTION_RETENTION: "1000"
-      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
-      ETCD_SNAPSHOT_COUNT: "50000"
-    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls=http://0.0.0.0:2379 --data-dir=/etcd
-    volumes:
-      - shipmind_etcd_data:/etcd
-
-  minio:
-    image: minio/minio:latest
-    container_name: shipmind-minio
-    restart: unless-stopped
-    environment:
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-    command: minio server /minio_data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - shipmind_minio_data:/minio_data
-
+  # Milvus standalone with embedded etcd and local storage: a single container,
+  # no separate etcd or MinIO services needed.
   milvus:
     image: milvusdb/milvus:v2.5.4
     container_name: shipmind-milvus
     restart: unless-stopped
     command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
     environment:
-      ETCD_ENDPOINTS: etcd:2379
-      MINIO_ADDRESS: minio:9000
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: /var/lib/milvus/etcd
+      ETCD_CONFIG_PATH: /milvus/configs/embedEtcd.yaml
+      COMMON_STORAGETYPE: local
     ports:
       - "19530:19530"
       - "9091:9091"
-    depends_on:
-      - etcd
-      - minio
+    volumes:
+      - shipmind_milvus_data:/var/lib/milvus
+      - ./docker/milvus/embedEtcd.yaml:/milvus/configs/embedEtcd.yaml:ro
+      - ./docker/milvus/user.yaml:/milvus/configs/user.yaml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
 
 volumes:
   shipmind_postgres_data:
-  shipmind_etcd_data:
-  shipmind_minio_data:
+  shipmind_milvus_data:

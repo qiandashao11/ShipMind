@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     embedding_provider: str = "qwen_local"
     embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"
     embedding_dimensions: int = 1024
+    # Some OpenAI-compatible providers reject the `dimensions` field for models
+    # without Matryoshka support; set to false to always request native size.
+    embedding_send_dimensions: bool = True
     embedding_api_key: str | None = None
     embedding_base_url: str | None = None
     local_embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"

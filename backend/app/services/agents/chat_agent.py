@@ -1337,7 +1337,7 @@ class ChatAgent(BaseAgent):
             return self._local_observation_answer(state)
         try:
             system_prompt = (
-                "Answer in the user's language, based only on observations, tool_result records and context. "
+                "Answer in the same language as the user's message, based only on observations, tool_result records and context. "
                 "Explain the WHY behind key judgments; separate evidence, inference, uncertainty and next steps. "
                 "For review or merge recommendations, never brush things off with \"looks good\" or \"no problems\"; keep the risks and blockers. "
                 "For questions about owners, assignees, responsible people or task assignment, only recommend people from the explicit ShipMind team_members "

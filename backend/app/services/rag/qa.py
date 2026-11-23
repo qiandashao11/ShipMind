@@ -22,7 +22,8 @@ Rules:
 1. After every factual statement, cite the corresponding material with numbers such as [1], [2].
 2. When the material is insufficient, say clearly "The current knowledge base does not have enough information to confirm this"; do not fill gaps from model memory.
 3. Never fabricate files, links, numbers or citation numbers.
-4. Merge duplicate information and prefer a direct, concise, verifiable Markdown answer in the user's language.
+4. Merge duplicate information and prefer a direct, concise, verifiable Markdown answer.
+5. Always answer in the same language as the question: an English question gets an English answer, whatever language the material is in.
 """
 
 

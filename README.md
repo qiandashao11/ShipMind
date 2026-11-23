@@ -6,13 +6,15 @@ ShipMind is a full-stack AI agent for engineering collaboration around GitHub pu
 
 ## Screenshots
 
-These screenshots come from the local demo mode (SQLite, seeded demo repository, deterministic embeddings, no LLM key), so they show the built-in fallback analysis. With an LLM configured, the same views show model-generated results.
+Captured from a local run against a seeded demo repository, with DeepSeek-V4-Flash for generation, Qwen3-Embedding-4B for embeddings and Milvus as the vector store.
 
 ### Multi-agent workflow
 
-"Can PR #8 be merged?" fans out to the Planner, then the issue, PR, CI and RAG agents, then the Observer and Synthesis. Every run is persisted with its task graph, per-agent results and the Observer's cross-checks.
+Asking "Can PR #8 be merged?" makes the chat agent call the engineering workflow. It fans out to the Planner, then the issue, PR, CI and RAG agents, then the Observer and Synthesis, and the answer above is built from their combined output. Every tool call, skill activation and RAG pre-retrieval shows up in the trace, and every run is persisted with its task graph, per-agent results and the Observer's cross-checks.
 
-![Workflow runs](docs/images/workflow-runs.png)
+| Tool call trace | Workflow runs |
+| --- | --- |
+| ![Tool call trace](docs/images/tool-trace.png) | ![Workflow runs](docs/images/workflow-runs.png) |
 
 ### Issue triage, PR review and CI debugging
 
@@ -26,7 +28,7 @@ Each analysis streams a public trace of the steps on the left and renders a stru
 | CI root cause | Safety drafts |
 | --- | --- |
 | ![CI debugging](docs/images/ci-debug.png) | ![Safety drafts](docs/images/safety-drafts.png) |
-| Pulls out the first key error block, classifies the failure and decides whether it blocks the merge. | External writes become drafts that a human must confirm, and every action is written to an audit log. |
+| Pulls out the first key error block, classifies the failure, links it to the most likely PR and decides whether it blocks the merge. | External writes become drafts that a human must confirm, and every action is written to an audit log. |
 
 ### RAG knowledge base
 
@@ -86,7 +88,7 @@ More detail lives in [docs/architecture/](docs/architecture/).
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres etcd minio milvus
+docker compose up -d postgres milvus   # Milvus runs in standalone mode with embedded etcd
 
 cd backend
 python -m venv .venv
@@ -134,7 +136,7 @@ If you only want to try the pages, structured data and the model-free fallback a
 .\scripts\start_rag.ps1
 ```
 
-The script disables Milvus, uses deterministic embeddings and heuristic reranking, and turns off the demo knowledge base's `0.8` score threshold so that results aren't all filtered out when only the keyword branch is active. It is good for checking pages, upload parsing, relational storage, the keyword branch of hybrid search and citation display, but vector search status will show `degraded`, so it does not prove the full RAG pipeline works. To verify vector recall, hybrid retrieval and reindexing, start PostgreSQL, etcd, MinIO and Milvus as described in Quick Start.
+The script disables Milvus, uses deterministic embeddings and heuristic reranking, and turns off the demo knowledge base's `0.8` score threshold so that results aren't all filtered out when only the keyword branch is active. It is good for checking pages, upload parsing, relational storage, the keyword branch of hybrid search and citation display, but vector search status will show `degraded`, so it does not prove the full RAG pipeline works. To verify vector recall, hybrid retrieval and reindexing, start PostgreSQL and Milvus as described in Quick Start.
 
 Knowledge bases default to `Qwen/Qwen3-Embedding-0.6B` and `qwen3-rerank`. Install `backend/requirements-local-embedding.txt` to run Qwen embeddings locally; set `DASHSCOPE_API_KEY` and `RERANK_BASE_URL` to switch to DashScope `text-embedding-v4` and `qwen3-rerank`. If the default embedding dependencies are missing, the system raises a clear error rather than silently switching to a different vector space in production configurations; only the local demo script above explicitly selects deterministic embeddings. If `LLM_API_KEY` is configured, use `.\scripts\start_rag.ps1 -UseConfiguredLLM` to enable model generation.
 
